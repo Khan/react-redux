@@ -1,217 +1,223 @@
-import expect from 'expect';
-import jsdom from 'mocha-jsdom';
-import React, { PropTypes, Component } from 'react';
-import TestUtils from 'react-addons-test-utils';
-import { createStore } from 'redux';
-import { Provider } from '../../src/index';
-import createProvider from '../../src/components/createProvider';
+/*eslint-disable react/prop-types*/
+
+import React, { Component } from 'react'
+import PropTypes from 'prop-types'
+import TestRenderer from 'react-test-renderer'
+import { createStore } from 'redux'
+import { Provider, createProvider, connect } from '../../src/index'
 
 describe('React', () => {
   describe('Provider', () => {
-    jsdom();
+      const createChild = (storeKey = 'store') => {
+        class Child extends Component {
+          render() {
+            return <div />
+          }
+        }
 
-    class Child extends Component {
-      static contextTypes = {
-        store: PropTypes.object.isRequired
-      }
+        Child.contextTypes = {
+          [storeKey]: PropTypes.object.isRequired
+        }
 
-      render() {
-        return <div />;
-      }
+        return Child
     }
-
-    it('should not warn when using child-as-a-function before React 0.14', () => {
-      const store = createStore(() => ({}));
-      ['0.13.0-beta', '0.13.0', '0.13.3'].forEach(version => {
-        const LocalProvider = createProvider({ ...React, version });
-
-        let spy = expect.spyOn(console, 'error');
-        const tree = TestUtils.renderIntoDocument(
-          <LocalProvider store={store}>
-            {() => <Child />}
-          </LocalProvider>
-        );
-        spy.destroy();
-        expect(spy.calls.length).toBe(0);
-
-        spy = expect.spyOn(console, 'error');
-        tree.forceUpdate();
-        spy.destroy();
-        expect(spy.calls.length).toBe(0);
-      });
-    });
-
-    it('should warn once when using a single element before React 0.14', () => {
-      const store = createStore(() => ({}));
-      ['0.13.0-beta', '0.13.0', '0.13.3', undefined].forEach(version => {
-        const LocalProvider = createProvider({ ...React, version });
-        // Trick React into checking propTypes every time:
-        LocalProvider.displayName = Math.random().toString();
-
-        let spy = expect.spyOn(console, 'error');
-        const tree = TestUtils.renderIntoDocument(
-          <LocalProvider store={store}>
-            <Child />
-          </LocalProvider>
-        );
-        spy.destroy();
-
-        expect(spy.calls.length).toBe(2);
-        expect(spy.calls[0].arguments[0]).toMatch(
-          /Invalid prop `children` of type `object` supplied to .*, expected `function`./
-        );
-        expect(spy.calls[1].arguments[0]).toMatch(
-          /With React 0.13, you need to wrap <Provider> child into a function. This restriction will be removed with React 0.14./
-        );
-
-        spy = expect.spyOn(console, 'error');
-        tree.forceUpdate();
-        spy.destroy();
-        expect(spy.calls.length).toBe(0);
-      });
-    });
-
-    it('should warn once when using child-as-a-function after React 0.14', () => {
-      const store = createStore(() => ({}));
-      ['0.14.0-beta3', '0.14.0', '0.14.2', '0.15.0-beta', '1.0.0-beta', '1.0.0'].forEach(version => {
-        const LocalProvider = createProvider({ ...React, version });
-        // Trick React into checking propTypes every time:
-        LocalProvider.displayName = Math.random().toString();
-
-        let spy = expect.spyOn(console, 'error');
-        const tree = TestUtils.renderIntoDocument(
-          <LocalProvider store={store}>
-            {() => <Child />}
-          </LocalProvider>
-        );
-        spy.destroy();
-
-        expect(spy.calls.length).toBe(2);
-        expect(spy.calls[0].arguments[0]).toMatch(
-          /Invalid prop `children` supplied to .*, expected a single ReactElement./
-        );
-        expect(spy.calls[1].arguments[0]).toMatch(
-          /With React 0.14 and later versions, you no longer need to wrap <Provider> child into a function./
-        );
-
-        spy = expect.spyOn(console, 'error');
-        tree.forceUpdate();
-        spy.destroy();
-        expect(spy.calls.length).toBe(0);
-      });
-    });
+    const Child = createChild();
 
     it('should enforce a single child', () => {
-      const store = createStore(() => ({}));
+      const store = createStore(() => ({}))
 
-      expect(() => TestUtils.renderIntoDocument(
-        <Provider store={store}>
-          <div />
-        </Provider>
-      )).toNotThrow();
+      // Ignore propTypes warnings
+      const propTypes = Provider.propTypes
+      Provider.propTypes = {}
 
-      expect(() => TestUtils.renderIntoDocument(
-        <Provider store={store}>
-        </Provider>
-      )).toThrow(/exactly one child/);
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => {})
 
-      expect(() => TestUtils.renderIntoDocument(
-        <Provider store={store}>
-          <div />
-          <div />
-        </Provider>
-      )).toThrow(/exactly one child/);
-    });
+      try {
+        expect(() => TestRenderer.create(
+          <Provider store={store}>
+            <div />
+          </Provider>
+        )).not.toThrow()
 
-    it('should enforce a single child when using function-as-a-child', () => {
-      const store = createStore(() => ({}));
+        expect(() => TestRenderer.create(
+          <Provider store={store}>
+          </Provider>
+        )).toThrow(/a single React element child/)
 
-      expect(() => TestUtils.renderIntoDocument(
-        <Provider store={store}>
-          {() => <div />}
-        </Provider>
-      )).toNotThrow();
-
-      expect(() => TestUtils.renderIntoDocument(
-        <Provider store={store}>
-          {() => {}}
-        </Provider>
-      )).toThrow(/exactly one child/);
-    });
+        expect(() => TestRenderer.create(
+          <Provider store={store}>
+            <div />
+            <div />
+          </Provider>
+        )).toThrow(/a single React element child/)
+      } finally {
+        Provider.propTypes = propTypes
+        spy.mockRestore()
+      }
+    })
 
     it('should add the store to the child context', () => {
-      const store = createStore(() => ({}));
+      const store = createStore(() => ({}))
 
-      const spy = expect.spyOn(console, 'error');
-      const tree = TestUtils.renderIntoDocument(
+      const spy = jest.spyOn(console, 'error').mockImplementation(() => {})
+      const testRenderer = TestRenderer.create(
         <Provider store={store}>
           <Child />
         </Provider>
-      );
-      spy.destroy();
-      expect(spy.calls.length).toBe(0);
+      )
+      spy.mockRestore()
+      expect(spy).toHaveBeenCalledTimes(0)
 
-      const child = TestUtils.findRenderedComponentWithType(tree, Child);
-      expect(child.context.store).toBe(store);
-    });
+      const child = testRenderer.root.findByType(Child).instance
+      expect(child.context.store).toBe(store)
+    })
 
-    it('should add the store to the child context with function-as-a-child', () => {
-      const store = createStore(() => ({}));
+    it('should add the store to the child context using a custom store key', () => {
+        const store = createStore(() => ({}))
+        const CustomProvider = createProvider('customStoreKey');
+        const CustomChild = createChild('customStoreKey');
 
-      const spy = expect.spyOn(console, 'error');
-      const tree = TestUtils.renderIntoDocument(
-        <Provider store={store}>
-          {() => <Child />}
-        </Provider>
-      );
-      spy.destroy();
-      expect(spy.calls.length).toBe(0);
+        const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        const testRenderer = TestRenderer.create(
+          <CustomProvider store={store}>
+            <CustomChild />
+          </CustomProvider>
+        )
+        spy.mockRestore()
+        expect(spy).toHaveBeenCalledTimes(0)
 
-      const child = TestUtils.findRenderedComponentWithType(tree, Child);
-      expect(child.context.store).toBe(store);
-    });
+        const child = testRenderer.root.findByType(CustomChild).instance
+        expect(child.context.customStoreKey).toBe(store)
+    })
 
     it('should warn once when receiving a new store in props', () => {
-      const store1 = createStore((state = 10) => state + 1);
-      const store2 = createStore((state = 10) => state * 2);
-      const store3 = createStore((state = 10) => state * state);
+      const store1 = createStore((state = 10) => state + 1)
+      const store2 = createStore((state = 10) => state * 2)
+      const store3 = createStore((state = 10) => state * state)
 
       class ProviderContainer extends Component {
-        state = { store: store1 };
-
+        constructor() {
+          super()
+          this.state = { store: store1 }
+        }
         render() {
           return (
             <Provider store={this.state.store}>
               <Child />
             </Provider>
-          );
+          )
         }
       }
 
-      const container = TestUtils.renderIntoDocument(<ProviderContainer />);
-      const child = TestUtils.findRenderedComponentWithType(container, Child);
-      expect(child.context.store.getState()).toEqual(11);
+      const testRenderer = TestRenderer.create(<ProviderContainer />)
+      const child = testRenderer.root.findByType(Child).instance
+      expect(child.context.store.getState()).toEqual(11)
 
-      let spy = expect.spyOn(console, 'error');
-      container.setState({ store: store2 });
-      spy.destroy();
+      let spy = jest.spyOn(console, 'error').mockImplementation(() => {})
+      testRenderer.root.instance.setState({ store: store2 })
+      spy.mockRestore()
 
-      expect(child.context.store.getState()).toEqual(11);
-      expect(spy.calls.length).toBe(1);
-      expect(spy.calls[0].arguments[0]).toBe(
+      expect(child.context.store.getState()).toEqual(11)
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy.mock.calls[0][0]).toBe(
         '<Provider> does not support changing `store` on the fly. ' +
         'It is most likely that you see this error because you updated to ' +
         'Redux 2.x and React Redux 2.x which no longer hot reload reducers ' +
-        'automatically. See https://github.com/rackt/react-redux/releases/' +
+        'automatically. See https://github.com/reduxjs/react-redux/releases/' +
         'tag/v2.0.0 for the migration instructions.'
-      );
+      )
 
-      spy = expect.spyOn(console, 'error');
-      container.setState({ store: store3 });
-      spy.destroy();
+      spy = jest.spyOn(console, 'error').mockImplementation(() => {})
+      testRenderer.root.instance.setState({ store: store3 })
+      spy.mockRestore()
 
-      expect(child.context.store.getState()).toEqual(11);
-      expect(spy.calls.length).toBe(0);
-    });
-  });
-});
+      expect(child.context.store.getState()).toEqual(11)
+      expect(spy).toHaveBeenCalledTimes(0)
+    })
+
+    it('should handle subscriptions correctly when there is nested Providers', () => {
+      const reducer = (state = 0, action) => (action.type === 'INC' ? state + 1 : state)
+
+      const innerStore = createStore(reducer)
+      const innerMapStateToProps = jest.fn(state => ({ count: state }))
+      @connect(innerMapStateToProps)
+      class Inner extends Component {
+        render() { return <div>{this.props.count}</div> }
+      }
+
+      const outerStore = createStore(reducer)
+      @connect(state => ({ count: state }))
+      class Outer extends Component {
+        render() { return <Provider store={innerStore}><Inner /></Provider> }
+      }
+
+      TestRenderer.create(<Provider store={outerStore}><Outer /></Provider>)
+      expect(innerMapStateToProps).toHaveBeenCalledTimes(1)
+
+      innerStore.dispatch({ type: 'INC'})
+      expect(innerMapStateToProps).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('should pass state consistently to mapState', () => {
+    function stringBuilder(prev = '', action) {
+      return action.type === 'APPEND'
+        ? prev + action.body
+        : prev
+    }
+
+    const store = createStore(stringBuilder)
+
+    store.dispatch({ type: 'APPEND', body: 'a' })
+    let childMapStateInvokes = 0
+
+    @connect(state => ({ state }), null, null, { withRef: true })
+    class Container extends Component {
+      emitChange() {
+        store.dispatch({ type: 'APPEND', body: 'b' })
+      }
+
+      render() {
+        return (
+          <div>
+            <button ref="button" onClick={this.emitChange.bind(this)}>change</button>
+            <ChildContainer parentState={this.props.state} />
+          </div>
+        )
+      }
+    }
+
+    @connect((state, parentProps) => {
+      childMapStateInvokes++
+      // The state from parent props should always be consistent with the current state
+      expect(state).toEqual(parentProps.parentState)
+      return {}
+    })
+    class ChildContainer extends Component {
+      render() {
+        return <div />
+      }
+    }
+
+    const testRenderer = TestRenderer.create(
+      <Provider store={store}>
+        <Container />
+      </Provider>
+    )
+
+    expect(childMapStateInvokes).toBe(1)
+
+    // The store state stays consistent when setState calls are batched
+    store.dispatch({ type: 'APPEND', body: 'c' })
+    expect(childMapStateInvokes).toBe(2)
+
+    // setState calls DOM handlers are batched
+    const button = testRenderer.root.findByType('button')
+    button.props.onClick()
+    expect(childMapStateInvokes).toBe(3)
+
+    // Provider uses unstable_batchedUpdates() under the hood
+    store.dispatch({ type: 'APPEND', body: 'd' })
+    expect(childMapStateInvokes).toBe(4)
+  })
+})
